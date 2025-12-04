@@ -1,0 +1,169 @@
+body {
+    margin: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #f5f7fa;
+    position: relative;
+}
+
+/* Blurred logo watermark background */
+body::before {
+    content: '';
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 1000px;
+    height: 1000px;
+    background-image: url('logo.jpeg');
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    /* make watermark subtle (0.0 - 1.0). 10 was incorrect and made it fully opaque */
+    opacity: 1;
+    filter: blur(1px);
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* Sidebar */
+.sidebar {
+    width: 230px;
+    height: 100vh;
+    position: fixed;
+    background: #a34f9f;
+    padding-top: 20px;
+    color: white;
+    z-index: 1000;
+}
+
+.sidebar h2 {
+    text-align: center;
+    margin-bottom: 30px;
+    color: #ecf0f1;
+    font-family: 'Georgia', 'Palatino Linotype', serif;
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    margin-top: 20px;
+}
+
+.sidebar a {
+    display: block;
+    padding: 15px 20px;
+    text-decoration: none;
+    color: #ecf0f1;
+    font-size: 15px;
+    border-bottom: 1px solid #a34f9f;
+}
+
+.sidebar a:hover {
+    background: #a34f9f;
+}
+
+/* Content Area */
+.content {
+    margin-left: 230px;
+    padding: 20px;
+    position: relative;
+    z-index: 2;
+}
+
+/* Dashboard Cards */
+.card {
+    display: inline-block;
+    background: rgba(255, 255, 255, 0.85);
+    padding: 25px;
+    margin: 10px;
+    border-radius: 10px;
+    width: 250px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+    position: relative;
+    z-index: 2;
+}
+
+.card h3 {
+    margin: 0;
+    color: #2c3e50;
+}
+
+/* Table styling */
+table {
+    border-collapse: collapse;
+    width: 100%;
+    background: transparent;
+    margin-top: 20px;
+    position: relative;
+    z-index: 2;
+}
+
+table th, table td {
+    padding: 12px;
+    border: 1px solid #ddd;
+    background: rgba(255, 255, 255, 0.85);
+}
+
+/* Remove blue color from table links (Full Name column) */
+table a {
+    color: inherit;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+table a:hover {
+    text-decoration: underline;
+}
+
+table th {
+    background: #34495e;
+    color: white;
+}
+
+button, .btn {
+    padding: 10px 15px;
+    background: #2980b9;
+    color: white;
+    border: none;
+    cursor: pointer;
+    text-decoration: none;
+    border-radius: 5px;
+}
+
+button:hover, .btn:hover {
+    background: #1f6390;
+}
+
+/* Login Page */
+.login-box {
+    width: 350px;
+    margin: 120px auto;
+    padding: 30px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    /* ensure login box appears above the fixed watermark pseudo-element */
+    position: relative;
+    z-index: 2;
+}
+
+.login-box input {
+    width: 100%;
+    padding: 12px;
+    margin: 10px 0;
+}
+
+.login-box button {
+    width: 100%;
+}
+
+/* Highlight row on hover  */
+table tr:hover td {
+    background: rgba(255, 255, 255, 1);
+}
+
+/* Emphasis when hovering the Full Name itself — keep text emphasis but white background */
+table td:nth-child(2) a:hover {
+    background: rgba(255, 255, 255, 1);
+    color: #b03a3a;
+    font-weight: 600;
+    text-decoration: none;
+}
