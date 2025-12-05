@@ -201,8 +201,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const bdWarn = document.createElement('div');
     bdWarn.id = 'birthdateWarning';
     bdWarn.style.marginTop = '4px';
-    bdWarn.style.fontSize = '12px';
-    bdWarn.style.color = '#c0392b';
     if (bd && !document.getElementById('birthdateWarning')) {
         bd.parentNode.insertBefore(bdWarn, bd.nextSibling);
     }
@@ -217,24 +215,35 @@ document.addEventListener('DOMContentLoaded', () => {
     if (emailInput) {
         emailInput.addEventListener('blur', validateEmailRealTime);
     }
-    // Live-check age when birthdate changes
+    // Live-check age when birthdate changes or on blur
     if (bd) {
-        bd.addEventListener('change', function() {
-            const val = this.value;
+        function checkAge() {
+            const val = bd.value;
             const warn = document.getElementById('birthdateWarning');
-            if (!val) { if (warn) warn.innerText = ''; return; }
+            if (!val) { if (warn) warn.innerHTML = ''; return; }
             const d = new Date(val);
             const today = new Date();
             d.setHours(0,0,0,0); today.setHours(0,0,0,0);
+            
+            // Check if date is in the future
+            if (d > today) {
+                if (warn) warn.innerHTML = '<span style="color:#c0392b; font-size:12px;">▲ Birthdate cannot be in the future.</span>';
+                return;
+            }
+            
+            // Check age > 65
             let age = today.getFullYear() - d.getFullYear();
             const m = today.getMonth() - d.getMonth();
             if (m < 0 || (m === 0 && today.getDate() < d.getDate())) age--;
             if (age > 65) {
-                if (warn) warn.innerText = '⚠ Age is over 65; cannot register.';
+                if (warn) warn.innerHTML = '<span style="color:#c0392b; font-size:12px;">▲ Age is over 65; cannot register.</span>';
             } else {
-                if (warn) warn.innerText = '';
+                if (warn) warn.innerHTML = '';
             }
-        });
+        }
+        bd.addEventListener('change', checkAge);
+        bd.addEventListener('blur', checkAge);
+        bd.addEventListener('input', checkAge);
     }
 });
 
@@ -334,7 +343,7 @@ window.addUser = async function(event) {
         today.setHours(0,0,0,0);
         if (selected > today) {
             const errorContainer = document.getElementById('addUserError');
-            if (errorContainer) errorContainer.innerText = 'Birthdate cannot be in the future.';
+            if (errorContainer) errorContainer.innerText = 'Please enter a valid birthdate. Future dates are not allowed.';
             return; // abort submission
         }
 
