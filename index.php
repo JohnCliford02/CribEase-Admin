@@ -12,7 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         header("Location: dashboard.php");
         exit;
     } else {
-        $error = "Invalid login!";
+        $error = "The username or password you entered is incorrect.";
     }
 }
 ?>
@@ -26,6 +26,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
         <input type="password" name="password" placeholder="Password" required>
         <button>Login</button>
 
-        <?php if(isset($error)) echo "<p style='color:red;'>$error</p>"; ?>
+        <?php if(isset($error)) echo "<p style='color:red; white-space:nowrap; margin-top:12px;'>$error</p>"; ?>
     </form>
 </div>

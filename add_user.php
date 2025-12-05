@@ -360,7 +360,6 @@ window.addUser = async function(event) {
             return; // abort submission
         }
     }
-    // role is a <select>, not an input — use select selector
     const role = document.querySelector("select[name='role']").value || "User";
 
     const errorContainer = document.getElementById('addUserError');
@@ -428,12 +427,12 @@ window.addUser = async function(event) {
             password: md5(pass),
             birthdate: birthdate,
             role: role,
-            // mark source of creation so UI can show "Created Via"
+            
             createdVia: 'website',
             createdBy: 'admin',
             createdAt: serverTimestamp()
         });
-        // show success modal then redirect shortly after
+
         showSuccessModal();
     } catch (e) {
         console.error('addUser error', e);
@@ -444,17 +443,15 @@ window.addUser = async function(event) {
     }
 };
 
-// Helper to trim whitespace
 function trim(str) {
     return str ? str.trim() : '';
 }
 
-// Show/hide success modal and redirect after short delay
 function showSuccessModal() {
     const ov = document.getElementById('successModalOverlay');
     if (!ov) return;
     ov.style.display = 'flex';
-    // redirect after 2 seconds (allow user to read/press OK)
+    // redirect after 2 seconds
     setTimeout(() => { window.location.href = 'users.php?added=1'; }, 2000);
 }
 
@@ -462,13 +459,11 @@ function hideSuccessModal() {
     const ov = document.getElementById('successModalOverlay');
     if (!ov) return;
     ov.style.display = 'none';
-    // also redirect when user clicks OK
+    // also redirect
     window.location.href = 'users.php?added=1';
 }
 
 </script>
-
-<!-- MD5 Library already loaded above the module script -->
 
 <div class="sidebar">
     <h2>CribEase</h2>

@@ -165,7 +165,6 @@ function getDisplayName(u) {
 function getCreationSource(u) {
     if (!u) return 'Unknown';
 
-    // If explicit creation source field exists, normalize common values
     const explicit = u.createdVia ?? u.created_via ?? u.registeredVia ?? u.createdFrom ?? u.source ?? u.createdBy;
     if (explicit) {
         const e = String(explicit).toLowerCase();
@@ -174,7 +173,7 @@ function getCreationSource(u) {
         return String(explicit);
     }
 
-    // Detect mobile app indicators: explicit mobile flags or common mobile fields
+   /* // Detect mobile app indicators: explicit mobile flags or common mobile fields
     const mobileExplicit = (u.createdVia && String(u.createdVia).toLowerCase().includes('mobile'))
         || (u.created_via && String(u.created_via).toLowerCase().includes('mobile'))
         || (u.createdFromApp || u.createdFromApp === true) || u.createdFromMobile || u.createdViaApp;
@@ -188,23 +187,23 @@ function getCreationSource(u) {
             if (p.includes('ios') || p.includes('iphone') || p.includes('ipad')) return 'Mobile App (iOS)';
         }
         return 'Mobile App';
-    }
+    }*/
 
     // If provider fields exist, it's from Firebase Auth
     const provider = u.providerId ?? u.provider ?? u.authProvider;
     if (provider) return `Firebase Auth (${provider})`;
 
-    // presence of a password field (hashed) or explicit admin flags => Admin-created via website
+    // presence of a password field or explicit admin flags => Admin-created via website
     if (u.password || u.createdBy === 'admin' || u.createdByAdmin || u.createdBy === 'website') return 'Admin';
 
     // Otherwise assume the document was created directly in Firestore
     return 'Firestore';
 }
 
-// Query users ordered by creation timestamp descending so newest registered users appear first
+//  newest registered users appear first
 const usersQuery = query(collection(db, "users"), orderBy("createdAt", "desc"));
 onSnapshot(usersQuery, (snapshot) => {
-    // Clear existing rows (header)
+
     userTable.innerHTML = `
         <tr>
             <th style="width:8%">ID</th>
@@ -323,7 +322,7 @@ window.showUserRecords = async function(userId, linkElement) {
 
     container.innerHTML = `<h2>Sensor Records for ${escapeHtml(fullname)} <button onclick="closeUserRecords();" style="float:right; padding:5px 10px; background:#999; color:white; border:none; cursor:pointer;">Close</button></h2>`;
 
-    // Query Firestore sensor_data where user_id == userId (no orderBy to avoid index requirement)
+    // Query Firestore sensor_data where user_id == userId
     try {
         console.log('Querying sensor_data for user_id:', userId);
         const q = query(collection(db, 'sensor_data'), where('user_id', '==', userId), limit(50));
@@ -336,7 +335,7 @@ window.showUserRecords = async function(userId, linkElement) {
             return;
         }
 
-        // Sort records by timestamp descending (in memory)
+        // Sort records by timestamp descending
         const records = [];
         snap.forEach(d => records.push(d.data()));
         records.sort((a, b) => {

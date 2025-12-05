@@ -5,7 +5,7 @@ body {
     position: relative;
 }
 
-/* Blurred logo watermark background */
+/* Blurred logo watermark */
 body::before {
     content: '';
     position: fixed;
@@ -18,7 +18,7 @@ body::before {
     background-size: contain;
     background-repeat: no-repeat;
     background-position: center;
-    /* make watermark subtle (0.0 - 1.0). 10 was incorrect and made it fully opaque */
+    /* make watermark subtle */
     opacity: 3;
     filter: blur(0.50px);
     pointer-events: none;
@@ -102,7 +102,7 @@ table th, table td {
     background: rgba(255, 255, 255, 0.85);
 }
 
-/* Remove blue color from table links (Full Name column) */
+/* Remove blue color from table links */
 table a {
     color: inherit;
     text-decoration: none;
@@ -134,13 +134,13 @@ button:hover, .btn:hover {
 
 /* Login Page */
 .login-box {
-    width: 350px;
+    width: 50%;
     margin: 120px auto;
     padding: 30px;
     background: white;
     border-radius: 8px;
     box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-    /* ensure login box appears above the fixed watermark pseudo-element */
+    /* ensure login box appears above the fixed watermark */
     position: relative;
     z-index: 2;
 }
@@ -158,12 +158,13 @@ button:hover, .btn:hover {
 /* Highlight row on hover  */
 table tr:hover td {
     background: rgba(255, 255, 255, 1);
+    color: #0000FF;
 }
 
-/* Emphasis when hovering the Full Name itself — keep text emphasis but white background */
+/*  hovering the Full Name itself but white background */
 table td:nth-child(2) a:hover {
     background: rgba(255, 255, 255, 1);
-    color: #b03a3a;
+    color: #0000FF;
     font-weight: 600;
     text-decoration: none;
 }

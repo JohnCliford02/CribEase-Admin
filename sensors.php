@@ -87,7 +87,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// Live update table from Firestore sensor_data collection (ordered + limited)
+// Live update table from Firestore sensor_data collection
 const sensorQuery = query(collection(db, "sensor_data"), orderBy("timestamp", "desc"), limit(100));
 onSnapshot(sensorQuery, (snapshot) => {
     const table = document.getElementById("sensorTable");
