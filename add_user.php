@@ -197,6 +197,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const today = new Date().toISOString().split('T')[0];
         bd.setAttribute('max', today);
     }
+    // Add a small inline warning element for age validation under the birthdate input
+    const bdWarn = document.createElement('div');
+    bdWarn.id = 'birthdateWarning';
+    bdWarn.style.marginTop = '4px';
+    bdWarn.style.fontSize = '12px';
+    bdWarn.style.color = '#c0392b';
+    if (bd && !document.getElementById('birthdateWarning')) {
+        bd.parentNode.insertBefore(bdWarn, bd.nextSibling);
+    }
     
     // Add real-time validation listeners for fullname and email
     const fullnameInput = document.querySelector("input[name='fullname']");
@@ -207,6 +216,25 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (emailInput) {
         emailInput.addEventListener('blur', validateEmailRealTime);
+    }
+    // Live-check age when birthdate changes
+    if (bd) {
+        bd.addEventListener('change', function() {
+            const val = this.value;
+            const warn = document.getElementById('birthdateWarning');
+            if (!val) { if (warn) warn.innerText = ''; return; }
+            const d = new Date(val);
+            const today = new Date();
+            d.setHours(0,0,0,0); today.setHours(0,0,0,0);
+            let age = today.getFullYear() - d.getFullYear();
+            const m = today.getMonth() - d.getMonth();
+            if (m < 0 || (m === 0 && today.getDate() < d.getDate())) age--;
+            if (age > 65) {
+                if (warn) warn.innerText = '⚠ Age is over 65; cannot register.';
+            } else {
+                if (warn) warn.innerText = '';
+            }
+        });
     }
 });
 
@@ -297,7 +325,7 @@ window.addUser = async function(event) {
     const pass = document.querySelector("input[name='password']").value;
     const birthdate = document.querySelector("input[name='birthdate']").value || null;
     
-    // Validate birthdate is not in the future
+    // Validate birthdate is not in the future and enforce max age (<= 65)
     if (birthdate) {
         const selected = new Date(birthdate);
         const today = new Date();
@@ -307,6 +335,19 @@ window.addUser = async function(event) {
         if (selected > today) {
             const errorContainer = document.getElementById('addUserError');
             if (errorContainer) errorContainer.innerText = 'Birthdate cannot be in the future.';
+            return; // abort submission
+        }
+
+        // Calculate age and prevent registration if older than 65
+        let age = today.getFullYear() - selected.getFullYear();
+        const m = today.getMonth() - selected.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < selected.getDate())) {
+            age--;
+        }
+
+        if (age > 65) {
+            const errorContainer = document.getElementById('addUserError');
+            if (errorContainer) errorContainer.innerText = 'Users older than 65 cannot be registered.';
             return; // abort submission
         }
     }
@@ -378,6 +419,9 @@ window.addUser = async function(event) {
             password: md5(pass),
             birthdate: birthdate,
             role: role,
+            // mark source of creation so UI can show "Created Via"
+            createdVia: 'website',
+            createdBy: 'admin',
             createdAt: serverTimestamp()
         });
         // show success modal then redirect shortly after
@@ -448,8 +492,6 @@ function hideSuccessModal() {
             <option value="">-- Select a Role --</option>
             <option value="Parent">Parent</option>
             <option value="Caregiver">Caregiver</option>
-            <option value="Doctor">Doctor</option>
-            <option value="Nurse">Nurse</option>
         </select>
 
         <label>Password</label>

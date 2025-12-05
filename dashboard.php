@@ -20,7 +20,7 @@ if (!isset($_SESSION['admin'])) {
     padding: 20px;
 }
 
-/* Prevent horizontal page scroll caused by fixed sidebar + full-width content */
+/* Prevent horizontal page scroll caused by fixed sidebar */
 html, body {
     overflow-x: hidden;
 }

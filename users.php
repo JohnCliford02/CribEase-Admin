@@ -25,6 +25,12 @@ if (!isset($_SESSION['admin'])) {
 #userTable th, #userTable td, .table-wrapper table th, .table-wrapper table td {
     padding:8px 10px; border:1px solid #eee; vertical-align:top; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
+/* Make sure the Action column is wide enough to show buttons */
+#userTable td:last-child, #userTable th:last-child {
+    min-width:120px;
+    white-space:nowrap;
+    overflow:visible;
+}
 /* Allow certain cells to wrap if needed (e.g., long sensor logs) */
 .wrap-allow { white-space:normal; word-break:break-word; }
 
@@ -81,11 +87,13 @@ if (!isset($_SESSION['admin'])) {
         <div class="scrollable">
             <table id="userTable">
                 <tr>
-                    <th style="width:10%">ID</th>
-                    <th style="width:30%">Full Name</th>
-                    <th style="width:25%">Email</th>
-                    <th style="width:15%">Birthdate</th>
+                    <th style="width:8%">ID</th>
+                    <th style="width:26%">Full Name</th>
+                    <th style="width:22%">Email</th>
+                    <th style="width:12%">Birthdate</th>
                     <th style="width:10%">Role</th>
+                    <th style="width:10%">Created Via</th>
+                    <th style="width:12%">Account Creation</th>
                     <th style="width:10%">Action</th>
                 </tr>
             </table>
@@ -146,19 +154,73 @@ window.clearSearch = function() {
 
 document.getElementById('searchInput').addEventListener('keyup', filterUsers);
 
+// Helper: get a user's display name checking common Firestore field variants
+function getDisplayName(u) {
+    if (!u) return '-';
+    const nameFromParts = (u.firstName || u.lastName) ? `${u.firstName ?? ''} ${u.lastName ?? ''}`.trim() : '';
+    return u.fullname ?? u.fullName ?? u.full_name ?? u.displayName ?? u.name ?? (nameFromParts || (u.email ?? '-'));
+}
+
+// Helper: determine how the user was created (website, firebase/auth provider, or unknown)
+function getCreationSource(u) {
+    if (!u) return 'Unknown';
+
+    // If explicit creation source field exists, normalize common values
+    const explicit = u.createdVia ?? u.created_via ?? u.registeredVia ?? u.createdFrom ?? u.source ?? u.createdBy;
+    if (explicit) {
+        const e = String(explicit).toLowerCase();
+        if (e.includes('web') || e.includes('admin') || e.includes('site')) return 'Admin';
+        if (e.includes('firebase') || e.includes('auth') || e.includes('google') || e.includes('facebook')) return 'Firebase Auth';
+        return String(explicit);
+    }
+
+    // Detect mobile app indicators: explicit mobile flags or common mobile fields
+    const mobileExplicit = (u.createdVia && String(u.createdVia).toLowerCase().includes('mobile'))
+        || (u.created_via && String(u.created_via).toLowerCase().includes('mobile'))
+        || (u.createdFromApp || u.createdFromApp === true) || u.createdFromMobile || u.createdViaApp;
+    const mobileFields = u.deviceId || u.platform || u.appVersion || u.os || u.device || u.mobile || u.client === 'mobile';
+    if (mobileExplicit || mobileFields) {
+        // try to show platform if available
+        const plat = (u.platform || u.os || u.device || '').toString();
+        if (plat) {
+            const p = plat.toLowerCase();
+            if (p.includes('android')) return 'Mobile App (Android)';
+            if (p.includes('ios') || p.includes('iphone') || p.includes('ipad')) return 'Mobile App (iOS)';
+        }
+        return 'Mobile App';
+    }
+
+    // If provider fields exist, it's from Firebase Auth
+    const provider = u.providerId ?? u.provider ?? u.authProvider;
+    if (provider) return `Firebase Auth (${provider})`;
+
+    // presence of a password field (hashed) or explicit admin flags => Admin-created via website
+    if (u.password || u.createdBy === 'admin' || u.createdByAdmin || u.createdBy === 'website') return 'Admin';
+
+    // Otherwise assume the document was created directly in Firestore
+    return 'Firestore';
+}
+
 // Query users ordered by creation timestamp descending so newest registered users appear first
 const usersQuery = query(collection(db, "users"), orderBy("createdAt", "desc"));
 onSnapshot(usersQuery, (snapshot) => {
     // Clear existing rows (header)
     userTable.innerHTML = `
         <tr>
-            <th>ID</th><th>Full Name</th><th>Email</th><th>Birthdate</th><th>Role</th><th>Action</th>
+            <th style="width:8%">ID</th>
+            <th style="width:22%">Full Name</th>
+            <th style="width:20%">Email</th>
+            <th style="width:10%">Birthdate</th>
+            <th style="width:8%">Role</th>
+            <th style="width:10%">Created Via</th>
+            <th style="width:12%">Account Creation</th>
+            <th style="width:10%">Action</th>
         </tr>
     `;
 
     if (snapshot.empty) return;
 
-    snapshot.forEach(docSnap => {
+        snapshot.forEach(docSnap => {
         const id = docSnap.id;
         const u = docSnap.data();
 
@@ -166,8 +228,22 @@ onSnapshot(usersQuery, (snapshot) => {
         const birthdate = u.birthdate ? u.birthdate : "-";
         const role = u.role ? u.role : "-";
 
-        // Build display name from available fields; prioritize fullname, fall back to email if name missing
-        const displayName = u.fullname ?? u.name ?? ((u.firstName || u.lastName) ? `${u.firstName ?? ''} ${u.lastName ?? ''}`.trim() : (u.email ?? '-'));
+        // Build display name from available fields; use helper to cover multiple Firestore field variants
+        const displayName = getDisplayName(u);
+
+        // Format createdAt to time-only (HH:MM:SS local). Support Firestore Timestamp or ISO/date string
+        let createdTime = '-';
+        if (u.createdAt) {
+            try {
+                if (u.createdAt.toDate) {
+                    createdTime = u.createdAt.toDate().toLocaleTimeString();
+                } else {
+                    createdTime = new Date(u.createdAt).toLocaleTimeString();
+                }
+            } catch (e) {
+                createdTime = '-';
+            }
+        }
 
         row.innerHTML = `
             <td>${id}</td>
@@ -175,6 +251,8 @@ onSnapshot(usersQuery, (snapshot) => {
             <td><span title="${escapeHtml(u.email ?? '-')}">${escapeHtml(u.email ?? '-')}</span></td>
             <td><span title="${escapeHtml(birthdate)}">${escapeHtml(birthdate)}</span></td>
             <td><span title="${escapeHtml(role)}">${escapeHtml(role)}</span></td>
+            <td><span title="${escapeHtml(getCreationSource(u))}">${escapeHtml(getCreationSource(u))}</span></td>
+            <td><span title="${escapeHtml(createdTime)}">${escapeHtml(createdTime)}</span></td>
             <td>
                 <a class="btn" href="edit_user.php?id=${id}">Edit</a>
                 <button class="btn" style="background:#c0392b;" onclick="deleteUser('${id}')">
@@ -187,9 +265,7 @@ onSnapshot(usersQuery, (snapshot) => {
     });
 }, err => console.error('users snapshot error', err));
 
-// -------------------------------------------
 // Delete user from Firestore
-// -------------------------------------------
 window.deleteUser = async function(id) {
     if (!confirm("Are you sure you want to delete this user?")) return;
     try {
@@ -239,7 +315,7 @@ window.showUserRecords = async function(userId, linkElement) {
         const userDoc = await getDoc(doc(db, 'users', userId));
         if (userDoc.exists()) {
             const u = userDoc.data();
-            fullname = u.fullname ?? u.name ?? ((u.firstName || u.lastName) ? `${u.firstName ?? ''} ${u.lastName ?? ''}`.trim() : (u.email ?? '-'));
+            fullname = getDisplayName(u);
         }
     } catch (e) {
         console.error('failed to fetch user for records header', e);

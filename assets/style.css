@@ -19,8 +19,8 @@ body::before {
     background-repeat: no-repeat;
     background-position: center;
     /* make watermark subtle (0.0 - 1.0). 10 was incorrect and made it fully opaque */
-    opacity: 1;
-    filter: blur(1px);
+    opacity: 3;
+    filter: blur(0.50px);
     pointer-events: none;
     z-index: 0;
 }

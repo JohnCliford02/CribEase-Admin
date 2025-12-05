@@ -10,6 +10,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     if (mysqli_num_rows($q) > 0) {
         $_SESSION['admin'] = $u;
         header("Location: dashboard.php");
+        exit;
     } else {
         $error = "Invalid login!";
     }
