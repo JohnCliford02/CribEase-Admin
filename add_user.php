@@ -206,12 +206,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     // Add real-time validation listeners for fullname and email
-    const fullnameInput = document.querySelector("input[name='fullname']");
+   // const fullnameInput = document.querySelector("input[name='fullname']");
     const emailInput = document.querySelector("input[name='email']");
     
+    /*
     if (fullnameInput) {
         fullnameInput.addEventListener('blur', validateFullnameRealTime);
     }
+    */
     if (emailInput) {
         emailInput.addEventListener('blur', validateEmailRealTime);
     }
@@ -247,7 +249,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// Real-time fullname validation
+// Real-time fullname validation (commented out)
+/*
 async function validateFullnameRealTime() {
     const fullnameInput = document.querySelector("input[name='fullname']");
     const fullname = fullnameInput ? fullnameInput.value.trim() : '';
@@ -285,6 +288,7 @@ async function validateFullnameRealTime() {
         console.error('fullname validation error', e);
     }
 }
+*/
 
 // Real-time email validation
 async function validateEmailRealTime() {
@@ -386,6 +390,7 @@ window.addUser = async function(event) {
             }
         });
 
+        /*
         // Check if fullname already exists (case-insensitive)
         // Fetch all users and check client-side for case-insensitive fullname match
         const allUsersQuery = window.firebaseQuery(window.firebaseCollection(window.firebaseDb, "users"));
@@ -415,6 +420,17 @@ window.addUser = async function(event) {
                     errorMsg = '⚠ The name you entered is already been used';
                 }
                 errorContainer.innerHTML = '<span style="color:#c0392b;">' + errorMsg + '</span>';
+            }
+            if (submitBtn) { submitBtn.disabled = false; submitBtn.innerText = 'Add User'; }
+            return; // abort submission
+        }
+        */
+
+        // Enforce unique email only (fullname uniqueness check is commented out)
+        if (emailExists) {
+            const errorContainer = document.getElementById('addUserError');
+            if (errorContainer) {
+                errorContainer.innerHTML = '<span style="color:#c0392b;">⚠ The email you entered is already been used</span>';
             }
             if (submitBtn) { submitBtn.disabled = false; submitBtn.innerText = 'Add User'; }
             return; // abort submission
