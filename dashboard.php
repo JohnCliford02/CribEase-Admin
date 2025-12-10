@@ -20,7 +20,7 @@ if (!isset($_SESSION['admin'])) {
     padding: 20px;
 }
 
-/* Prevent horizontal page scroll caused by fixed sidebar */
+/* Prevent horizontal page scroll caused by fixed sidebar + full-width content */
 html, body {
     overflow-x: hidden;
 }
@@ -121,6 +121,9 @@ td {
     <a href="dashboard.php" class="active">Dashboard</a>
     <a href="users.php">Users</a>
     <a href="sensors.php">Sensor Data</a>
+    <a href="feedback.php">Feedback</a>
+    <a href="sales.php">Sales Report</a>
+    <a href="subscriptions.php">Subscriptions</a>
     <a href="logout.php">Logout</a>
 </div>
 
@@ -139,34 +142,6 @@ td {
             <div class="card">
                 <h2>Total Sensor Records</h2>
                 <div class="value" id="totalSensors">0</div>
-            </div>
-        </div>
-
-        <!-- LATEST SENSOR DATA -->
-        <div class="latest-box">
-            <div class="card">
-                <h2>Latest Sensor Data</h2>
-
-                <div class="table-wrapper">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>User</th>
-                                <th>Temperature</th>
-                                <th>Environmental Log</th>
-                                <th>Sleep Pattern</th>
-                                <th>Fall</th>
-                                <th>Time</th>
-                            </tr>
-                        </thead>
-                        <tbody id="latestSensorBody">
-                            <tr>
-                                <td colspan="6">Loading...</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-
             </div>
         </div>
     </div>
@@ -200,41 +175,4 @@ db.collection("sensor_data").onSnapshot(snapshot => {
     const count = snapshot.size || 0;
     document.getElementById("totalSensors").innerText = count;
 }, err => console.error('sensor_data count snapshot error', err));
-
-/* LATEST SENSOR DATA */
-db.collection("sensor_data")
-    .orderBy("timestamp", "desc")
-    .limit(10)
-    .onSnapshot(snapshot => {
-    const body = document.getElementById("latestSensorBody");
-    body.innerHTML = "";
-    if (snapshot.empty) {
-        body.innerHTML = "<tr><td colspan='6'>No data available</td></tr>";
-        return;
-    }
-
-    snapshot.forEach(doc => {
-        const s = doc.data();
-        // Format timestamp consistently (compat Timestamp -> Date)
-        let timeStr = "N/A";
-        if (s.timestamp) {
-            if (s.timestamp.toDate) {
-                timeStr = s.timestamp.toDate().toLocaleString();
-            } else {
-                timeStr = s.timestamp;
-            }
-        }
-
-        body.innerHTML += `
-            <tr>
-                <td>${s.user_id || "N/A"}</td>
-                <td>${s.temperature || "N/A"}</td>
-                <td>${s.environmental_log || "N/A"}</td>
-                <td>${s.sleep_pattern || "N/A"}</td>
-                <td>${s.fall_detection ? "Yes" : "No"}</td>
-                <td>${timeStr}</td>
-            </tr>
-        `;
-    });
-}, err => console.error('latest sensor snapshot error', err));
 </script>

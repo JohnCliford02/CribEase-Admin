@@ -11,7 +11,10 @@ if (!isset($_SESSION['admin'])) {
     <h2>CribEase</h2>
     <a href="dashboard.php">Dashboard</a>
     <a href="users.php">Users</a>
-    <a href="sensors.php">Sensor Data</a>
+    <a href="sensors.php" class="active">Sensor Data</a>
+    <a href="feedback.php">Feedback</a>
+    <a href="sales.php">Sales Report</a>
+    <a href="subscriptions.php">Subscriptions</a>
     <a href="logout.php">Logout</a>
 </div>
 
@@ -26,15 +29,24 @@ if (!isset($_SESSION['admin'])) {
 
     <div class="table-wrapper">
         <table id="sensorTable">
-            <tr>
-                <th>ID</th>
-                <th>User ID</th>
-                <th>Temperature</th>
-                <th>Environmental Log</th>
-                <th>Sleep Pattern</th>
-                <th>Fall Detection</th>
-                <th>Timestamp</th>
-            </tr>
+            <thead>
+                <tr>
+                    <th>Device ID</th>
+                    <!-- <th>Distance</th> -->
+                    <th>Fall Count</th>
+                    <th>Fall Status</th>
+                    <!-- <th>Humidity</th> -->
+                    <th>Sleep Pattern</th>
+                    <th>Sound</th>
+                    <th>Temperature</th>
+                    <th>Start Time</th>
+                    <th>Last Active</th>
+
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Sensor data rows will be inserted here -->
+            </tbody>
         </table>
     </div>
 </div>
@@ -42,22 +54,23 @@ if (!isset($_SESSION['admin'])) {
 <!-- Firebase SDK -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
-import { getFirestore, collection, query, orderBy, limit, onSnapshot } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js";
 
-// Local responsive table styles to prevent page horizontal scroll
 const style = document.createElement('style');
 style.innerHTML = `
     .table-wrapper { overflow-x: auto; }
     #sensorTable { width: 100%; border-collapse: collapse; table-layout: fixed; }
     #sensorTable th, #sensorTable td { padding: 10px; text-align: left; vertical-align: top; word-break: break-word; white-space: normal; }
     #sensorTable th { background: #34495e; color: white; }
+    #sensorTable .device-id-cell { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; }
+    #sensorTable .device-id-cell:hover { white-space: normal; overflow: visible; word-break: break-word; background-color: #f9f9f9; z-index: 10; position: relative; max-width: 300px; }
 `;
 document.head.appendChild(style);
 
 // Search functionality
 window.filterSensors = function() {
     const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-    const rows = document.querySelectorAll('#sensorTable tr:not(:first-child)');
+    const rows = document.querySelectorAll('#sensorTable tbody tr');
     
     rows.forEach(row => {
         const text = row.textContent.toLowerCase();
@@ -85,56 +98,102 @@ const firebaseConfig = {
 
 // Init
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+const rtdb = getDatabase(app);
 
-// Live update table from Firestore sensor_data collection
-const sensorQuery = query(collection(db, "sensor_data"), orderBy("timestamp", "desc"), limit(100));
-onSnapshot(sensorQuery, (snapshot) => {
-    const table = document.getElementById("sensorTable");
+// Listen to realtime database devices path and update table
+onValue(ref(rtdb, 'devices'), (snapshot) => {
+    const tbody = document.getElementById('sensorTable').getElementsByTagName('tbody')[0];
+    tbody.innerHTML = '';
 
-    // Clear old rows except header
-    table.innerHTML = `
-        <tr>
-            <th>ID</th>
-            <th>User ID</th>
-            <th>Temperature</th>
-            <th>Environmental Log</th>
-            <th>Sleep Pattern</th>
-            <th>Fall Detection</th>
-            <th>Timestamp</th>
-        </tr>
-    `;
-
-    if (snapshot.empty) {
-        table.innerHTML += '<tr><td colspan="7" style="text-align:center; padding:20px;">No sensor records found</td></tr>';
+    const data = snapshot.val();
+    if (!data) {
+        const row = document.createElement('tr');
+        row.innerHTML = '<td colspan="9" style="text-align:center; padding:20px;">No sensor data found</td>';
+        tbody.appendChild(row);
         return;
     }
 
-    snapshot.forEach(docSnap => {
-        const id = docSnap.id;
-        const s = docSnap.data();
+    // Iterate through each device and display ALL sensor records (historical data)
+    Object.keys(data).forEach(deviceId => {
+        const device = data[deviceId];
+        const sensor = device.sensor || {};
+        const info = device.info || {};
 
-        // Format timestamp consistently
-        let timeStr = "-";
-        if (s.timestamp) {
-            if (s.timestamp.toDate) {
-                timeStr = s.timestamp.toDate().toLocaleString();
-            } else {
-                timeStr = s.timestamp;
+        // Helper function to convert 24hr time to 12hr AM/PM format
+        function formatTo12Hour(timeString) {
+            if (!timeString) return '-';
+            try {
+                // Parse time string like "12/09/2025 - 13:50:15"
+                const parts = timeString.split(' - ');
+                if (parts.length < 2) return timeString;
+                
+                const datePart = parts[0];
+                const timePart = parts[1];
+                const [hours, minutes, seconds] = timePart.split(':');
+                
+                let hour = parseInt(hours);
+                const ampm = hour >= 12 ? 'PM' : 'AM';
+                hour = hour % 12;
+                hour = hour ? hour : 12; // 0 should be 12
+                
+                const formattedTime = `${String(hour).padStart(2, '0')}:${minutes}:${seconds} ${ampm}`;
+                return `${datePart} - ${formattedTime}`;
+            } catch (e) {
+                return timeString;
             }
         }
 
-        table.innerHTML += `
-            <tr>
-                <td>${id}</td>
-                <td>${s.user_id ?? "-"}</td>
-                <td>${s.temperature ?? "-"}</td>
-                <td>${s.environmental_log ?? "-"}</td>
-                <td>${s.sleep_pattern ?? "-"}</td>
-                <td>${s.fall_detection ? "Yes" : "No"}</td>
-                <td>${timeStr}</td>
-            </tr>
-        `;
+        // Format Start Time (deviceStartTime)
+        let startTime = formatTo12Hour(info.deviceStartTime) || '-';
+        
+        // Format Last Active (deviceLastActive)
+        let lastActive = formatTo12Hour(info.deviceLastActive) || '-';
+
+        // Check if sensor is flat (single record) or nested (multiple historical records)
+        const sensorKeys = Object.keys(sensor);
+        
+        if (sensorKeys.length === 0) {
+            // No sensor data for this device
+            return;
+        }
+
+        // Check if this is a flat structure (has temperature, fallCount directly)
+        if (sensor.temperature !== undefined || sensor.fallCount !== undefined || sensor.fallStatus !== undefined) {
+            // Flat sensor structure - single row
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td class="device-id-cell">${sensor.device_id || deviceId}</td>
+                <td>${sensor.fallCount || '-'}</td>
+                <td>${sensor.fallStatus || '-'}</td>
+                <td>${sensor.sleepPattern || sensor.sleep_pattern || '-'}</td>
+                <td>${sensor.sound || '-'}</td>
+                <td>${sensor.temperature || '-'}</td>
+                <td>${startTime}</td>
+                <td>${lastActive}</td>
+            `;
+            tbody.appendChild(row);
+        } else {
+            // Nested structure - create row for EACH historical record
+            sensorKeys.forEach(recordKey => {
+                const record = sensor[recordKey];
+                if (typeof record !== 'object' || record === null) return;
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="device-id-cell">${record.device_id || deviceId}</td>
+                    <td>${record.fallCount || '-'}</td>
+                    <td>${record.fallStatus || '-'}</td>
+                    <td>${record.sleepPattern || record.sleep_pattern || '-'}</td>
+                    <td>${record.sound || '-'}</td>
+                    <td>${record.temperature || '-'}</td>
+                    <td>${startTime}</td>
+                    <td>${lastActive}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
     });
+
+    console.log('Sensor table updated with', Object.keys(data).length, 'devices');
 });
 </script>
