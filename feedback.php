@@ -6,6 +6,7 @@ if (!isset($_SESSION['admin'])) {
 }
 ?>
 <link rel="stylesheet" href="assets/style.css?v=2">
+<?php include 'includes/maintenance_banner.php'; ?>
 
 <style>
      /* Match other pages: table fills content area; keep message cells left-aligned */
@@ -21,10 +22,12 @@ if (!isset($_SESSION['admin'])) {
     <a href="feedback.php" class="active">Feedback</a>
     <a href="sales.php">Sales Report</a>
     <a href="subscriptions.php">Subscriptions</a>
+    <a href="maintenance.php">Maintenance</a>
     <a href="logout.php">Logout</a>
 </div>
 
 <div class="content" style="padding:30px;">
+    <div id="maintenanceBannerContainer"></div>
     <h1>Feedback</h1>
 
     <!-- Admin view: feedback submission removed. Only listing is shown. -->

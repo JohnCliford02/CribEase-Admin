@@ -1,0 +1,6 @@
+# ignore Firebase service account keys
+/tools/serviceAccountKey.json
+/tools/serviceAccountKey*.json
+
+# node modules
+/tools/node_modules

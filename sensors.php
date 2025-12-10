@@ -6,6 +6,7 @@ if (!isset($_SESSION['admin'])) {
 }
 ?>
 <link rel="stylesheet" href="assets/style.css?v=2">
+<?php include 'includes/maintenance_banner.php'; ?>
 
 <div class="sidebar">
     <h2>CribEase</h2>
@@ -15,10 +16,12 @@ if (!isset($_SESSION['admin'])) {
     <a href="feedback.php">Feedback</a>
     <a href="sales.php">Sales Report</a>
     <a href="subscriptions.php">Subscriptions</a>
+    <a href="maintenance.php">Maintenance</a>
     <a href="logout.php">Logout</a>
 </div>
 
 <div class="content">
+    <div id="maintenanceBannerContainer"></div>
     <h1>Sensor Data</h1>
 
     <div style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center;">
@@ -101,6 +104,10 @@ const app = initializeApp(firebaseConfig);
 const rtdb = getDatabase(app);
 
 // Listen to realtime database devices path and update table
+// Keep previous flat sensor snapshot per device and a local history to show appended readings
+const _prevDeviceSensor = {}; // deviceId -> last flat sensor object
+const _localHistory = {}; // deviceId -> array of previous flat sensor objects (most recent first)
+
 onValue(ref(rtdb, 'devices'), (snapshot) => {
     const tbody = document.getElementById('sensorTable').getElementsByTagName('tbody')[0];
     tbody.innerHTML = '';
@@ -159,7 +166,43 @@ onValue(ref(rtdb, 'devices'), (snapshot) => {
 
         // Check if this is a flat structure (has temperature, fallCount directly)
         if (sensor.temperature !== undefined || sensor.fallCount !== undefined || sensor.fallStatus !== undefined) {
-            // Flat sensor structure - single row
+            // Flat sensor structure - single latest reading in DB.
+            // We'll keep a local history per device so the UI can show appended readings
+            // rather than replacing the row every time the device writes a new flat object.
+            try {
+                const prev = _prevDeviceSensor[deviceId];
+                // If previous exists and differs from current, push previous into local history
+                if (prev && JSON.stringify(prev) !== JSON.stringify(sensor)) {
+                    _localHistory[deviceId] = _localHistory[deviceId] || [];
+                    // store a copy of prev with a captured timestamp from info.deviceLastActive (fallback to now)
+                    const histEntry = Object.assign({}, prev);
+                    histEntry._capturedAt = info.deviceLastActive || new Date().toISOString();
+                    _localHistory[deviceId].unshift(histEntry);
+                    // limit history length to 50 entries
+                    if (_localHistory[deviceId].length > 50) _localHistory[deviceId].pop();
+                }
+                // update prev pointer
+                _prevDeviceSensor[deviceId] = JSON.parse(JSON.stringify(sensor));
+            } catch (e) { console.warn('History tracking failed for', deviceId, e); }
+
+            // Render any local history entries first (most recent first)
+            const hist = _localHistory[deviceId] || [];
+            hist.forEach(record => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="device-id-cell">${record.device_id || deviceId}</td>
+                    <td>${record.fallCount || '-'}</td>
+                    <td>${record.fallStatus || '-'}</td>
+                    <td>${record.sleepPattern || record.sleep_pattern || '-'}</td>
+                    <td>${record.sound || '-'}</td>
+                    <td>${record.temperature || '-'}</td>
+                    <td>${startTime}</td>
+                    <td>${record._capturedAt ? formatTo12Hour(record._capturedAt) : lastActive}</td>
+                `;
+                tbody.appendChild(row);
+            });
+
+            // Finally render the current/latest reading
             const row = document.createElement('tr');
             row.innerHTML = `
                 <td class="device-id-cell">${sensor.device_id || deviceId}</td>

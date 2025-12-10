@@ -6,6 +6,7 @@ if (!isset($_SESSION['admin'])) {
 }
 ?>
 <link rel="stylesheet" href="assets/style.css?v=2">
+<?php include 'includes/maintenance_banner.php'; ?>
 
 <style>
 /* Highlight active user row */
@@ -199,10 +200,12 @@ if (!isset($_SESSION['admin'])) {
     <a href="feedback.php">Feedback</a>
     <a href="sales.php">Sales Report</a>
     <a href="subscriptions.php">Subscriptions</a>
+    <a href="maintenance.php">Maintenance</a>
     <a href="logout.php">Logout</a>
 </div>
 
 <div class="content">
+    <div id="maintenanceBannerContainer"></div>
     <h1>User Management</h1>
 
     <div class="search-box">

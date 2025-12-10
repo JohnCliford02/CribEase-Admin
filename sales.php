@@ -6,6 +6,7 @@ if (!isset($_SESSION['admin'])) {
 }
 ?>
 <link rel="stylesheet" href="assets/style.css?v=2">
+<?php include 'includes/maintenance_banner.php'; ?>
 
 <style>
 /* Truncate device IDs and expand inline on hover (no popup) */
@@ -56,10 +57,12 @@ if (!isset($_SESSION['admin'])) {
     <a href="feedback.php">Feedback</a>
     <a href="sales.php" class="active">Sales Report</a>
     <a href="subscriptions.php">Subscriptions</a>
+    <a href="maintenance.php">Maintenance</a>
     <a href="logout.php">Logout</a>
 </div>
 
 <div class="content" style="padding:30px;">
+    <div id="maintenanceBannerContainer"></div>
     <h1>Sales Report</h1>
     <div style="background:#fff3cd; color:#856404; border:1px solid #ffeeba; padding:12px; border-radius:6px; margin-bottom:20px; max-width:800px;">
         <strong>Buy 3 or more devices and get 5% discount</strong>

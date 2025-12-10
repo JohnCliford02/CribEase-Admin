@@ -6,6 +6,7 @@ if (!isset($_SESSION['admin'])) {
 }
 ?>
 <link rel="stylesheet" href="assets/style.css?v=2">
+<?php include 'includes/maintenance_banner.php'; ?>
 
 <!-- Firebase (compat builds for namespaced API like firebase.firestore()) -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -124,12 +125,13 @@ td {
     <a href="feedback.php">Feedback</a>
     <a href="sales.php">Sales Report</a>
     <a href="subscriptions.php">Subscriptions</a>
+    <a href="maintenance.php">Maintenance</a>
     <a href="logout.php">Logout</a>
 </div>
 
 <div class="content">
     <div class="dashboard-container">
-
+        <div id="maintenanceBannerContainer"></div>
         <h1>Dashboard</h1>
 
         <!-- CARDS -->
