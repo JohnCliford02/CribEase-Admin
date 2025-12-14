@@ -34,11 +34,6 @@ if (!isset($_SESSION['admin'])) {
     <div id="maintenanceBannerContainer"></div>
     <h1>Subscriptions</h1>
 
-    <!-- Add Subscription button -->
-    <div style="margin:14px 0;">
-        <button id="openSubModalBtn" class="btn">Add Subscription</button>
-    </div>
-
     <!-- Modal: Add New Subscription -->
     <div id="subModal" class="modal" aria-hidden="true">
         <div class="modal-overlay"></div>

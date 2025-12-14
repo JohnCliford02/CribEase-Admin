@@ -426,7 +426,7 @@ window.addUser = async function(event) {
         }
         */
 
-        // Enforce unique email only (fullname uniqueness check is commented out)
+        // unique email only
         if (emailExists) {
             const errorContainer = document.getElementById('addUserError');
             if (errorContainer) {

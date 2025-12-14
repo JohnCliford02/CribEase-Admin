@@ -126,14 +126,16 @@ if (!isset($_SESSION['admin'])) {
 
 .modal-content {
     background-color: #fff;
-    margin: 5% auto;
+    margin: 2% auto;
     padding: 20px;
     border-radius: 8px;
-    width: 90%;
-    max-width: 1000px;
-    max-height: 80vh;
+    width: 95%;
+    max-width: 1400px;
+    max-height: 90vh;
     overflow-y: auto;
     box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+    display: flex;
+    flex-direction: column;
 }
 
 .modal-header {
@@ -169,12 +171,39 @@ if (!isset($_SESSION['admin'])) {
     width: 100%;
     border-collapse: collapse;
     margin-top: 10px;
+    flex: 1;
+    overflow-y: auto;
 }
 
 .modal-table th, .modal-table td {
-    padding: 10px;
+    padding: 12px;
     border: 1px solid #ddd;
     text-align: left;
+    font-size: 13px;
+    word-break: break-word;
+}
+
+.modal-table {
+    display: block;
+    overflow-y: auto;
+    max-height: calc(90vh - 300px);
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.modal-table thead {
+    display: table;
+    width: 100%;
+    table-layout: fixed;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.modal-table tbody {
+    display: table;
+    width: 100%;
+    table-layout: fixed;
 }
 
 .modal-table th {
@@ -484,12 +513,27 @@ window.showUserRecords = async function(userId, linkElement) {
         const devicesData = devicesSnap.val();
         console.log('Total devices in DB:', Object.keys(devicesData).length);
         
+        // Load localStorage cache from sensors.php (contains historical records)
+        let localHistory = {};
+        try {
+            const cacheRaw = localStorage.getItem('cribease_sensor_cache_v1');
+            if (cacheRaw) {
+                const parsed = JSON.parse(cacheRaw);
+                if (parsed && parsed.hist) {
+                    localHistory = parsed.hist;
+                    console.log('Loaded local history cache:', Object.keys(localHistory).length, 'devices');
+                }
+            }
+        } catch (e) {
+            console.warn('Could not load local history cache:', e);
+        }
+        
         const records = [];
         
         // Collect ALL sensor records from the user's device (historical data)
         if (devicesData[userDeviceId]) {
             const device = devicesData[userDeviceId];
-            const sensor = device.sensor || {};
+            let sensor = device.sensor || {};
             const info = device.info || {};
             
             console.log('Device data:', device);
@@ -497,19 +541,54 @@ window.showUserRecords = async function(userId, linkElement) {
             
             const sensorKeys = Object.keys(sensor);
             
-            if (sensorKeys.length > 0) {
-                // Check if this looks like a flat sensor object (has temperature, fallCount, etc.)
-                if (sensor.temperature !== undefined || sensor.fallCount !== undefined || sensor.fallStatus !== undefined) {
-                    // Flat sensor structure - single record
-                    records.push({
+            // If sensor is empty, try to get from lastSensor or other fallbacks
+            if (sensorKeys.length === 0 && device.lastSensor) {
+                sensor = device.lastSensor;
+                console.log('Using lastSensor fallback');
+            }
+            
+            if (Object.keys(sensor).length > 0) {
+                // Check if this looks like a flat sensor object (has temperature, presenceDetection/fallCount, etc.)
+                if (sensor.temperature !== undefined || sensor.presenceDetection !== undefined || sensor.presenceStatus !== undefined || sensor.fallCount !== undefined || sensor.fallStatus !== undefined) {
+                    // Flat sensor structure - add current reading
+                    const currentRecord = {
                         ...sensor,
                         device_id: userDeviceId,
                         deviceStartTime: info.deviceStartTime,
-                        deviceLastActive: info.deviceLastActive
+                        deviceLastActive: info.deviceLastActive,
+                        _capturedAt: info.deviceLastActive || new Date().toISOString()
+                    };
+                    records.push(currentRecord);
+                    
+                    // Add historical records from localStorage cache (if available)
+                    if (localHistory[userDeviceId] && Array.isArray(localHistory[userDeviceId])) {
+                        console.log('Found', localHistory[userDeviceId].length, 'cached history records for device', userDeviceId);
+                        localHistory[userDeviceId].forEach(histRecord => {
+                            records.push({
+                                ...histRecord,
+                                device_id: userDeviceId,
+                                deviceStartTime: info.deviceStartTime,
+                                deviceLastActive: info.deviceLastActive,
+                                _capturedAt: histRecord._capturedAt || info.deviceLastActive || new Date().toISOString()
+                            });
+                        });
+                    }
+                    
+                    // Also check for local history in the sensor object (may have nested records)
+                    Object.keys(sensor).forEach(sensorKey => {
+                        if (typeof sensor[sensorKey] === 'object' && sensor[sensorKey] !== null && sensor[sensorKey].temperature !== undefined) {
+                            records.push({
+                                ...sensor[sensorKey],
+                                device_id: userDeviceId,
+                                deviceStartTime: info.deviceStartTime,
+                                deviceLastActive: info.deviceLastActive,
+                                _capturedAt: sensor[sensorKey]._capturedAt || info.deviceLastActive || new Date().toISOString()
+                            });
+                        }
                     });
                 } else {
                     // Nested structure - collect ALL entries (historical records)
-                    sensorKeys.forEach(key => {
+                    Object.keys(sensor).forEach(key => {
                         const sensorEntry = sensor[key];
                         // Skip if not an object
                         if (typeof sensorEntry !== 'object' || sensorEntry === null) return;
@@ -518,7 +597,8 @@ window.showUserRecords = async function(userId, linkElement) {
                             ...sensorEntry,
                             device_id: userDeviceId,
                             deviceStartTime: info.deviceStartTime,
-                            deviceLastActive: info.deviceLastActive
+                            deviceLastActive: info.deviceLastActive,
+                            _capturedAt: sensorEntry._capturedAt || sensorEntry.timestamp || info.deviceLastActive || new Date().toISOString()
                         });
                     });
                 }
@@ -541,18 +621,34 @@ window.showUserRecords = async function(userId, linkElement) {
             return;
         }
 
-        // Sort by timestamp descending if available
+        // Sort by timestamp descending if available (most recent first)
         records.sort((a, b) => {
-            const timeA = a.timestamp ? (a.timestamp.toDate ? a.timestamp.toDate().getTime() : new Date(a.timestamp).getTime()) : 0;
-            const timeB = b.timestamp ? (b.timestamp.toDate ? b.timestamp.toDate().getTime() : new Date(b.timestamp).getTime()) : 0;
+            // Try multiple timestamp fields
+            const getTime = (record) => {
+                if (record._capturedAt) {
+                    const d = new Date(record._capturedAt);
+                    return isNaN(d.getTime()) ? 0 : d.getTime();
+                }
+                if (record.timestamp) {
+                    const d = record.timestamp.toDate ? record.timestamp.toDate() : new Date(record.timestamp);
+                    return isNaN(d.getTime()) ? 0 : d.getTime();
+                }
+                if (record.deviceLastActive) {
+                    const d = new Date(record.deviceLastActive);
+                    return isNaN(d.getTime()) ? 0 : d.getTime();
+                }
+                return 0;
+            };
+            const timeA = getTime(a);
+            const timeB = getTime(b);
             return timeB - timeA;
         });
 
         let html = `<table class="modal-table"><thead><tr>
                         <th>Device ID</th>
                         
-                        <th>Fall Count</th>
-                        <th>Fall Status</th>
+                        <th>Presence Detection</th>
+                        <th>Presence Status</th>
                         
                         <th>Sleep Pattern</th>
                         <th>Sound</th>
@@ -636,24 +732,35 @@ window.showUserRecords = async function(userId, linkElement) {
             '-'
         ) : '-';
 
+        // Add all records to HTML with timestamps
         records.forEach(s => {
-            const time = s.timestamp ? (s.timestamp.toDate ? s.timestamp.toDate().toLocaleString() : s.timestamp) : '-';
+            const recordTime = formatTimestamp(s._capturedAt) || formatTimestamp(s.timestamp) || formatTimestamp(s.deviceLastActive) || '-';
             html += `<tr>
                         <td>${escapeHtml(s.device_id ?? '-')}</td>
                         
-                        <td>${s.fallCount ?? '-'}</td>
-                        <td>${s.fallStatus ?? '-'}</td>
+                        <td>${s.presenceDetection ?? s.fallCount ?? '-'}</td>
+                        <td>${s.presenceStatus ?? s.fallStatus ?? '-'}</td>
                         
                         <td>${escapeHtml(s.sleepPattern ?? s.sleep_pattern ?? '-')}</td>
                         <td>${s.sound ?? '-'}</td>
                         <td>${s.temperature ?? '-'}</td>
                         <td>${startTimeFormatted}</td>
-                        <td>${lastActiveFormatted}</td>
+                        <td>${recordTime}</td>
                     </tr>`;
         });
 
         html += '</tbody></table>';
+        
+        // Add controls below the table
+        html += `<div style="margin-top: 20px; text-align: center; border-top: 1px solid #ddd; padding-top: 15px;">
+                    <p style="font-weight: bold; margin-bottom: 10px;">Total Records: <span style="color: #2980b9; font-size: 18px;">${records.length}</span></p>
+                    <p style="margin-top: 5px; font-size: 11px; color: #999;">Last Updated: <span id="lastUpdated">${new Date().toLocaleTimeString()}</span></p>
+                </div>`;
+        
         modalBody.innerHTML = html;
+        
+        // Update last updated time
+        document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
     } catch (e) {
         console.error('showUserRecords error:', e);
         let errorMsg = e.message || 'Unknown error';

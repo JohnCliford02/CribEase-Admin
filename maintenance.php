@@ -4,6 +4,233 @@ if (!isset($_SESSION['admin'])) {
     header("Location: index.php"); 
     exit;
 }
+// Handle server-side POST to send maintenance message to Firestore
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_GET['action']) && $_GET['action'] === 'send_maintenance') {
+    // Read JSON body
+    $body = file_get_contents('php://input');
+    $data = json_decode($body, true);
+
+    header('Content-Type: application/json');
+
+    if (!$data) {
+        echo json_encode(['success' => false, 'error' => 'Invalid JSON']);
+        exit;
+    }
+
+    $projectId = 'esp32-connecttest'; // Your Firebase project ID
+    $firestoreUrl = "https://firestore.googleapis.com/v1/projects/{$projectId}/databases/(default)/documents";
+    
+    $title = isset($data['title']) ? $data['title'] : '';
+    $content = isset($data['content']) ? $data['content'] : '';
+    $severity = isset($data['severity']) ? $data['severity'] : 'info';
+    $timestamp = isset($data['timestamp']) ? $data['timestamp'] : date(DATE_ISO8601);
+    $recipients = isset($data['recipients']) && is_array($data['recipients']) ? $data['recipients'] : [];
+
+    $successCount = 0;
+    $errors = [];
+    $fcmSent = 0;
+    $fcmErrors = [];
+
+    // Create a single maintenance message document in Firestore
+    $docId = 'maintenance_' . time() . '_' . uniqid();
+    $maintenanceDocUrl = "{$firestoreUrl}/maintenance/{$docId}";
+
+    $firestorePayload = [
+        'fields' => [
+            'title' => ['stringValue' => $title],
+            'content' => ['stringValue' => $content],
+            'severity' => ['stringValue' => $severity],
+            'timestamp' => ['timestampValue' => $timestamp],
+            'recipients' => ['arrayValue' => ['values' => array_map(function($r) { return ['stringValue' => $r]; }, $recipients)]],
+            'read' => ['booleanValue' => false],
+            'createdAt' => ['timestampValue' => date(DATE_ISO8601)]
+        ]
+    ];
+
+    $ch = curl_init($maintenanceDocUrl);
+    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PATCH");
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($firestorePayload));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+
+    $resp = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlErr = curl_error($ch);
+    curl_close($ch);
+
+    if ($resp !== false && $httpCode >= 200 && $httpCode < 300) {
+        $successCount = 1;
+        error_log("Maintenance message created in Firestore: {$docId}");
+        
+        // Send FCM notifications to recipients
+        $fcmResult = sendFCMNotifications($title, $content, $severity, $recipients);
+        $fcmSent = $fcmResult['sent'];
+        $fcmErrors = $fcmResult['errors'];
+    } else {
+        $errors[] = ['firestore' => $httpCode, 'curl' => $curlErr, 'resp' => $resp];
+    }
+
+    echo json_encode([
+        'success' => true,
+        'sent' => $successCount,
+        'docId' => $docId,
+        'fcmSent' => $fcmSent,
+        'errors' => $errors,
+        'fcmErrors' => $fcmErrors
+    ]);
+    exit;
+}
+
+/**
+ * Send FCM push notifications to specified recipients
+ */
+function sendFCMNotifications($title, $content, $severity, $recipients = []) {
+    $sent = 0;
+    $errors = [];
+
+    // Check if service account key exists
+    $keyPath = __DIR__ . '/includes/firebase-adminsdk-key.json';
+    if (!file_exists($keyPath)) {
+        return ['sent' => 0, 'errors' => ['Service account key not found at ' . $keyPath]];
+    }
+
+    // Load service account credentials
+    $serviceAccount = json_decode(file_get_contents($keyPath), true);
+    if (!$serviceAccount) {
+        return ['sent' => 0, 'errors' => ['Invalid service account key']];
+    }
+
+    // Get FCM access token
+    $accessToken = getFirebaseAccessToken($serviceAccount);
+    if (!$accessToken) {
+        return ['sent' => 0, 'errors' => ['Failed to get Firebase access token']];
+    }
+
+    $projectId = $serviceAccount['project_id'];
+    $fcmUrl = "https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send";
+
+    // Query Firestore to get all user FCM tokens
+    $userTokens = getAllUserFCMTokens($accessToken, $projectId);
+
+    // Send notification to each token
+    foreach ($userTokens as $token) {
+        $notificationPayload = [
+            'message' => [
+                'token' => $token,
+                'notification' => [
+                    'title' => $title,
+                    'body' => $content
+                ],
+                'data' => [
+                    'severity' => $severity,
+                    'type' => 'maintenance',
+                    'timestamp' => date(DATE_ISO8601)
+                ]
+            ]
+        ];
+
+        $ch = curl_init($fcmUrl);
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "POST");
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($notificationPayload));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Content-Type: application/json',
+            'Authorization: Bearer ' . $accessToken
+        ]);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+
+        $resp = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpCode === 200) {
+            $sent++;
+        } else {
+            $errors[] = ['token' => substr($token, 0, 20) . '...', 'http' => $httpCode];
+        }
+    }
+
+    return ['sent' => $sent, 'errors' => $errors];
+}
+
+/**
+ * Get Firebase access token using service account credentials
+ */
+function getFirebaseAccessToken($serviceAccount) {
+    $header = json_encode(['alg' => 'RS256', 'typ' => 'JWT']);
+    $now = time();
+    $claim = json_encode([
+        'iss' => $serviceAccount['client_email'],
+        'scope' => 'https://www.googleapis.com/auth/cloud-platform',
+        'aud' => 'https://oauth2.googleapis.com/token',
+        'exp' => $now + 3600,
+        'iat' => $now
+    ]);
+
+    $header_b64 = rtrim(strtr(base64_encode($header), '+/', '-_'), '=');
+    $claim_b64 = rtrim(strtr(base64_encode($claim), '+/', '-_'), '=');
+    $signature_input = $header_b64 . '.' . $claim_b64;
+
+    // Sign the token with the private key
+    $privateKey = openssl_pkey_get_private($serviceAccount['private_key']);
+    openssl_sign($signature_input, $signature, $privateKey, 'RSA-SHA256');
+    $signature_b64 = rtrim(strtr(base64_encode($signature), '+/', '-_'), '=');
+
+    $jwt = $signature_input . '.' . $signature_b64;
+
+    // Exchange JWT for access token
+    $ch = curl_init('https://oauth2.googleapis.com/token');
+    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "POST");
+    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query([
+        'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+        'assertion' => $jwt
+    ]));
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+
+    $resp = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode === 200) {
+        $respData = json_decode($resp, true);
+        return $respData['access_token'] ?? null;
+    }
+
+    return null;
+}
+
+/**
+ * Get all user FCM tokens from Firestore
+ */
+function getAllUserFCMTokens($accessToken, $projectId) {
+    $tokens = [];
+    $firestoreUrl = "https://firestore.googleapis.com/v1/projects/{$projectId}/databases/(default)/documents/users";
+
+    $ch = curl_init($firestoreUrl);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Authorization: Bearer ' . $accessToken]);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+
+    $resp = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    if ($httpCode === 200) {
+        $data = json_decode($resp, true);
+        if (isset($data['documents'])) {
+            foreach ($data['documents'] as $doc) {
+                $fcmToken = $doc['fields']['fcmToken']['stringValue'] ?? null;
+                if ($fcmToken) {
+                    $tokens[] = $fcmToken;
+                }
+            }
+        }
+    }
+
+    return $tokens;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -359,7 +586,8 @@ if (!isset($_SESSION['admin'])) {
                 const userData = doc.data();
                 allUsers.push({
                     id: doc.id,
-                    deviceId: userData.deviceId || doc.id,
+                    // Prefer 'deviceID' (how it's stored in Firestore), fallback to 'deviceId', then to doc id
+                    deviceId: userData.deviceID || userData.deviceId || doc.id,
                     email: userData.email || 'No email'
                 });
             });
@@ -439,53 +667,51 @@ if (!isset($_SESSION['admin'])) {
 
         try {
             const timestamp = new Date().toISOString();
-            const messageData = {
-                title: title,
-                content: content,
-                severity: severity,
-                timestamp: timestamp,
-                createdAt: new Date(),
-                recipients: Array.from(selectedUsers),
-                recipientCount: selectedUsers.size
-            };
 
-            // Add message to Firestore maintenance messages collection
-            const docRef = await addDoc(collection(db, 'maintenance_messages'), messageData);
-
-            // Also send individual messages to each user's device in RTDB
+            // Resolve device IDs for the selected users
             const selectedUsersList = Array.from(selectedUsers);
-            let successCount = 0;
+            const deviceIds = selectedUsersList.map(uid => {
+                const u = allUsers.find(x => x.id === uid);
+                return u ? u.deviceId : null;
+            }).filter(Boolean);
 
-            for (const userId of selectedUsersList) {
-                try {
-                    const user = allUsers.find(u => u.id === userId);
-                    const deviceId = user.deviceId;
+            // POST to server-side endpoint to write to RTDB (both devices/{deviceId} and users/{userId} paths)
+            const resp = await fetch(window.location.pathname + '?action=send_maintenance', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    title, content, severity, timestamp, 
+                    recipients: deviceIds,
+                    userIds: selectedUsersList  // also send Firestore user IDs for fallback path
+                })
+            });
 
-                    // Store message in RTDB under users/{deviceId}/maintenance
-                    const messageRef = ref(rtdb, `users/${deviceId}/maintenance`);
-                    const maintenanceData = {
-                        title: title,
-                        content: content,
-                        severity: severity,
-                        timestamp: timestamp,
-                        read: false
-                    };
-                    
-                    // Update the maintenance node with the new message
-                    await update(messageRef, maintenanceData);
-                    successCount++;
-                } catch (err) {
-                    console.error('Error sending to device:', deviceId, err);
-                }
+            const result = await resp.json();
+            if (!result || !result.success) {
+                console.error('Server failed to send maintenance', result);
+                showAlert('Failed to send maintenance to devices: ' + (result && result.error ? result.error : 'server error'), 'error');
+            } else {
+                // Add message to Firestore maintenance messages collection (history)
+                const messageData = {
+                    title: title,
+                    content: content,
+                    severity: severity,
+                    timestamp: timestamp,
+                    createdAt: new Date(),
+                    recipients: selectedUsersList,
+                    recipientCount: selectedUsersList.length
+                };
+
+                await addDoc(collection(db, 'maintenance_messages'), messageData);
+
+                showAlert(`Maintenance message sent successfully to ${result.sent || 0}/${deviceIds.length} devices!`, 'success');
+
+                // Clear form
+                clearForm();
+
+                // Reload message history
+                loadMessageHistory();
             }
-
-            showAlert(`Maintenance message sent successfully to ${successCount}/${selectedUsers.size} users!`, 'success');
-            
-            // Clear form
-            clearForm();
-            
-            // Reload message history
-            loadMessageHistory();
 
         } catch (error) {
             console.error('Error sending message:', error);

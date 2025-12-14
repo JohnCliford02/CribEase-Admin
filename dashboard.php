@@ -12,6 +12,7 @@ if (!isset($_SESSION['admin'])) {
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js"></script>
 
 <style>
 /* DASHBOARD UI FIXES */
@@ -146,6 +147,37 @@ td {
                 <div class="value" id="totalSensors">0</div>
             </div>
         </div>
+
+        <!-- SENSOR METRICS CARDS -->
+        <div style="margin-top: 40px;">
+            <h2>Sensor Records by Metric</h2>
+            <div class="cards">
+                <div class="card">
+                    <h2>Presence Detection Records</h2>
+                    <div class="value" id="presenceDetectionRecords">0</div>
+                </div>
+
+                <div class="card">
+                    <h2>Presence Status Records</h2>
+                    <div class="value" id="presenceStatusRecords">0</div>
+                </div>
+
+                <div class="card">
+                    <h2>Sleep Pattern Records</h2>
+                    <div class="value" id="sleepPatternRecords">0</div>
+                </div>
+
+                <div class="card">
+                    <h2>Sound Records</h2>
+                    <div class="value" id="soundRecords">0</div>
+                </div>
+
+                <div class="card">
+                    <h2>Temperature Records</h2>
+                    <div class="value" id="temperatureRecords">0</div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -172,9 +204,87 @@ db.collection("users").onSnapshot(snapshot => {
     document.getElementById("totalUsers").innerText = count;
 }, err => console.error('users snapshot error', err));
 
-/* TOTAL SENSOR RECORDS */
-db.collection("sensor_data").onSnapshot(snapshot => {
-    const count = snapshot.size || 0;
-    document.getElementById("totalSensors").innerText = count;
-}, err => console.error('sensor_data count snapshot error', err));
+/* TOTAL SENSOR RECORDS - Count all sensor records from Realtime Database devices */
+const rtdb = firebase.database();
+rtdb.ref('devices').on('value', (snapshot) => {
+    let totalSensorRecords = 0;
+    let presenceDetectionCount = 0;
+    let presenceStatusCount = 0;
+    let sleepPatternCount = 0;
+    let soundCount = 0;
+    let temperatureCount = 0;
+    
+    const data = snapshot.val();
+    
+    if (data) {
+        // Iterate through each device
+        Object.keys(data).forEach(deviceId => {
+            const device = data[deviceId];
+            const sensor = device.sensor || {};
+            
+            // Check if sensor is flat (single record) or nested (multiple records)
+            const sensorKeys = Object.keys(sensor);
+            
+            if (sensorKeys.length > 0) {
+                // Check if this is a flat structure (has temperature, presenceDetection/fallCount directly)
+                if (sensor.temperature !== undefined || sensor.presenceDetection !== undefined || sensor.presenceStatus !== undefined || sensor.fallCount !== undefined || sensor.fallStatus !== undefined) {
+                    // Flat structure = 1 record per device
+                    totalSensorRecords += 1;
+                    
+                    // Count each metric (check both new and old field names)
+                    if ((sensor.presenceDetection !== undefined || sensor.fallCount !== undefined) && (sensor.presenceDetection !== null || sensor.fallCount !== null) && (sensor.presenceDetection !== '' || sensor.fallCount !== '')) {
+                        presenceDetectionCount += 1;
+                    }
+                    if ((sensor.presenceStatus !== undefined || sensor.fallStatus !== undefined) && (sensor.presenceStatus !== null || sensor.fallStatus !== null) && (sensor.presenceStatus !== '' || sensor.fallStatus !== '')) {
+                        presenceStatusCount += 1;
+                    }
+                    if ((sensor.sleepPattern || sensor.sleep_pattern) !== undefined && (sensor.sleepPattern || sensor.sleep_pattern) !== null && (sensor.sleepPattern || sensor.sleep_pattern) !== '') {
+                        sleepPatternCount += 1;
+                    }
+                    if (sensor.sound !== undefined && sensor.sound !== null && sensor.sound !== '') {
+                        soundCount += 1;
+                    }
+                    if (sensor.temperature !== undefined && sensor.temperature !== null && sensor.temperature !== '') {
+                        temperatureCount += 1;
+                    }
+                } else {
+                    // Nested structure = count each record object
+                    sensorKeys.forEach(key => {
+                        const record = sensor[key];
+                        if (typeof record === 'object' && record !== null) {
+                            totalSensorRecords += 1;
+                            
+                            // Count each metric (check both new and old field names)
+                            if ((record.presenceDetection !== undefined || record.fallCount !== undefined) && (record.presenceDetection !== null || record.fallCount !== null) && (record.presenceDetection !== '' || record.fallCount !== '')) {
+                                presenceDetectionCount += 1;
+                            }
+                            if ((record.presenceStatus !== undefined || record.fallStatus !== undefined) && (record.presenceStatus !== null || record.fallStatus !== null) && (record.presenceStatus !== '' || record.fallStatus !== '')) {
+                                presenceStatusCount += 1;
+                            }
+                            if ((record.sleepPattern || record.sleep_pattern) !== undefined && (record.sleepPattern || record.sleep_pattern) !== null && (record.sleepPattern || record.sleep_pattern) !== '') {
+                                sleepPatternCount += 1;
+                            }
+                            if (record.sound !== undefined && record.sound !== null && record.sound !== '') {
+                                soundCount += 1;
+                            }
+                            if (record.temperature !== undefined && record.temperature !== null && record.temperature !== '') {
+                                temperatureCount += 1;
+                            }
+                        }
+                    });
+                }
+            }
+        });
+    }
+    
+    // Update total count
+    document.getElementById("totalSensors").innerText = totalSensorRecords;
+    
+    // Update metric counts
+    document.getElementById("presenceDetectionRecords").innerText = presenceDetectionCount;
+    document.getElementById("presenceStatusRecords").innerText = presenceStatusCount;
+    document.getElementById("sleepPatternRecords").innerText = sleepPatternCount;
+    document.getElementById("soundRecords").innerText = soundCount;
+    document.getElementById("temperatureRecords").innerText = temperatureCount;
+}, err => console.error('sensor count error', err));
 </script>
