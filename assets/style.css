@@ -156,7 +156,6 @@ button:hover, .btn:hover {
 }
 
 /* Highlight row on hover  */
-/* Ensure hovered row appears above any expanded content from other rows */
 table tr { position: relative; }
 table tr:hover { z-index: 3; }
 table tr:hover td {

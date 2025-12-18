@@ -155,7 +155,7 @@ if (!isset($_SESSION['admin'])) {
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js"></script>
 
-<!-- MD5 Library (ensure available before module code that references it) -->
+<!-- MD5 Library -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/blueimp-md5/2.19.0/js/md5.min.js"></script>
 
 <!-- Global state for Firestore helpers -->

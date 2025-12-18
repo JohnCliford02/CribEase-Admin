@@ -467,8 +467,16 @@ onValue(ref(rtdb, 'devices'), (snapshot) => {
         return;
     }
 
-    // Iterate through each device and display ALL sensor records (historical data)
-    Object.keys(data).forEach(deviceId => {
+    // Iterate through each device and display up to MAX_DISPLAY sensor rows (historical data capped)
+    const MAX_DISPLAY = 200; // maximum rows to render in the table
+    let displayedCount = 0;   // rows appended so far
+    let totalRowsCounted = 0; // total rows encountered (for notice if needed)
+    let limitReached = false;
+
+    const deviceIds = Object.keys(data);
+    for (let d = 0; d < deviceIds.length; d++) {
+        if (displayedCount >= MAX_DISPLAY) { limitReached = true; break; }
+        const deviceId = deviceIds[d];
         const device = data[deviceId];
         let sensor = device.sensor || {};
         const info = device.info || {};
@@ -615,8 +623,13 @@ onValue(ref(rtdb, 'devices'), (snapshot) => {
                     <td>${startTime}</td>
                     <td>${lastActive}</td>
                 `;
-                tbody.appendChild(row);
-                return;
+                // increment total rows seen
+                totalRowsCounted++;
+                if (displayedCount < MAX_DISPLAY) {
+                    tbody.appendChild(row);
+                    displayedCount++;
+                }
+                continue;
             }
         }
 
@@ -666,8 +679,10 @@ onValue(ref(rtdb, 'devices'), (snapshot) => {
 
             // Render any local history entries first (most recent first)
             const hist = _localHistory[deviceId] || [];
-            hist.forEach(record => {
-                if (!record || typeof record !== 'object') return;
+            for (let h = 0; h < hist.length; h++) {
+                if (displayedCount >= MAX_DISPLAY) { limitReached = true; break; }
+                const record = hist[h];
+                if (!record || typeof record !== 'object') continue;
                 const hRow = document.createElement('tr');
                 // Resolve presence detection and status (prefer presenceDetection/presenceStatus)
                 let hDisplayPresenceDetection = (record.presenceDetection !== undefined && record.presenceDetection !== null)
@@ -703,8 +718,14 @@ onValue(ref(rtdb, 'devices'), (snapshot) => {
                     <td>${record._capturedAt ? formatTo12Hour(record._capturedAt) : startTime}</td>
                     <td>${record._capturedAt ? formatTo12Hour(record._capturedAt) : lastActive}</td>
                 `;
-                tbody.appendChild(hRow);
-            });
+                // increment total rows seen
+                totalRowsCounted++;
+                if (displayedCount < MAX_DISPLAY) {
+                    tbody.appendChild(hRow);
+                    displayedCount++;
+                }
+            }
+            if (limitReached) break;
 
             // Finally render the current/latest reading
             const row = document.createElement('tr');
@@ -746,7 +767,11 @@ onValue(ref(rtdb, 'devices'), (snapshot) => {
                 <td>${startTime}</td>
                 <td>${lastActive}</td>
             `;
-            tbody.appendChild(row);
+            totalRowsCounted++;
+            if (displayedCount < MAX_DISPLAY) {
+                tbody.appendChild(row);
+                displayedCount++;
+            }
         } else {
             // Nested structure - pick the latest record only (avoid creating a row per historical entry)
             const lastKey = sensorKeys[sensorKeys.length - 1];
@@ -790,10 +815,39 @@ onValue(ref(rtdb, 'devices'), (snapshot) => {
                     <td>${startTime}</td>
                     <td>${lastSeen}</td>
                 `;
-                tbody.appendChild(row);
+                // increment total rows seen
+                totalRowsCounted++;
+                if (displayedCount < MAX_DISPLAY) {
+                    tbody.appendChild(row);
+                    displayedCount++;
+                }
             }
         }
-    });
+        if (limitReached) break;
+    }
+
+    // Update summary cards
+    updateSummary(activeCount, totalCount, absentCount, tempCount > 0 ? (tempSum / tempCount).toFixed(1) : '--');
+
+    // Show a small notice if we limited the number of displayed rows
+    const paginationContainer = document.getElementById('paginationContainer');
+    let noticeEl = document.getElementById('displayLimitNotice');
+    if (!noticeEl) {
+        noticeEl = document.createElement('div');
+        noticeEl.id = 'displayLimitNotice';
+        noticeEl.style = 'margin-bottom:8px; color:#666; font-size:13px;';
+        paginationContainer.parentNode.insertBefore(noticeEl, paginationContainer);
+    }
+    if (displayedCount >= MAX_DISPLAY) {
+        noticeEl.textContent = `Showing ${displayedCount} records (limited to ${MAX_DISPLAY})`;
+    } else {
+        noticeEl.textContent = '';
+    }
+    
+    // Display paginated rows
+    displayAllRows();
+
+    console.log('Sensor table updated with', totalCount, 'devices -', activeCount, 'active');
 
     // Update summary cards
     updateSummary(activeCount, totalCount, absentCount, tempCount > 0 ? (tempSum / tempCount).toFixed(1) : '--');
